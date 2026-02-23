@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { width: 350px; padding: 15px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    h3 { color: #2c3e50; margin-top: 0; }
+    .btn { 
+      width: 100%; padding: 12px; background: #27ae60; color: white; 
+      border: none; border-radius: 4px; cursor: pointer; font-weight: bold;
+    }
+    .btn:hover { background: #219150; }
+    #status { margin-top: 10px; font-size: 13px; color: #666; }
+    #resultList { margin-top: 15px; max-height: 200px; overflow-y: auto; border-top: 1px solid #eee; }
+  </style>
+</head>
+<body>
+  <h3>📊 财务数据抓取</h3>
+  <button id="scrapeBtn" class="btn">提取页面报表并下载</button>
+  <div id="status">提示：页面上的财报已被红框标出</div>
+  <div id="resultList"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

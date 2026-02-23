@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "财务报表猎手 (Finance Hunter)",
+  "version": "1.0",
+  "description": "自动识别并抓取官网财报表格，支持一键导出 CSV",
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "all_frames": true
+    }
+  ],
+  "permissions": ["activeTab", "scripting"]
+}
