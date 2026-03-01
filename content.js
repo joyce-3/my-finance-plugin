@@ -43,7 +43,7 @@ function highlightTables() {
 }
 // 文远知行这种页面建议给 3 秒，等它渲染完
 setTimeout(highlightTables, 3000);
-*/
+
 
 function highlightTables() {
   // 1. 极度扩充关键词，只要沾边就抓
@@ -140,4 +140,191 @@ setTimeout(highlightTables, 3000);
 window.onscroll = () => {
   highlightTables();
 };
+*/
+// ====== 核心检测逻辑 ======
+const financeKeywords = [
+  "Revenue", "Income", "Assets", "Liabilities", "Equity", "Cash", 
+  "Operating", "Net loss", "Net income", "Balance", "Earnings", "EPS",
+  "资产", "负债", "收入", "支出", "利润", "现金流", "股东权益"
+];
 
+function isFinancialTable(element) {
+  const text = element.innerText || element.textContent;
+  const hasKeyword = financeKeywords.some(key => 
+    text.toLowerCase().includes(key.toLowerCase())
+  );
+  // 对于真实 <table>，检查行列数
+  if (element.tagName === 'TABLE') {
+    const isDataHeavy = element.rows.length > 3 && element.rows[0]?.cells.length > 2;
+    return hasKeyword || isDataHeavy;
+  }
+  // 对于 div 模拟的表格，至少要有关键词
+  return hasKeyword;
+}
+
+// ====== 处理真实 <table> ======
+function processNativeTables() {
+  document.querySelectorAll('table').forEach(table => {
+    if (table.dataset.detected) return;
+    if (isFinancialTable(table)) {
+      markAndAddButton(table, () => processSingleTable(table));
+    }
+  });
+}
+
+// ====== 处理 div 模拟的表格 ======
+function processDivTables() {
+  // 常见的 div 表格 role 属性
+  document.querySelectorAll('[role="table"], [role="grid"]').forEach(el => {
+    if (el.dataset.detected) return;
+    if (isFinancialTable(el)) {
+      markAndAddButton(el, () => processDivTable(el));
+    }
+  });
+
+  // 通过 class 名猜测（常见财务网站的规律）
+  const tableClassPatterns = /table|grid|spreadsheet|financ|report/i;
+  document.querySelectorAll('div[class]').forEach(el => {
+    if (el.dataset.detected) return;
+    if (!tableClassPatterns.test(el.className)) return;
+    // 子元素要有一定数量的行结构
+    const rows = el.querySelectorAll('[role="row"], .row, .tr');
+    if (rows.length > 3 && isFinancialTable(el)) {
+      markAndAddButton(el, () => processDivTable(el));
+    }
+  });
+}
+
+// ====== 处理 iframe 内的表格 ======
+function processIframes() {
+  document.querySelectorAll('iframe').forEach(iframe => {
+    try {
+      // 同源 iframe 才能访问
+      const iDoc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!iDoc) return;
+      iDoc.querySelectorAll('table').forEach(table => {
+        if (table.dataset.detected) return;
+        if (isFinancialTable(table)) {
+          markAndAddButton(table, () => processSingleTable(table));
+        }
+      });
+    } catch (e) {
+      // 跨域 iframe 会报错，忽略
+      console.log('跨域 iframe，无法访问:', iframe.src);
+    }
+  });
+}
+
+// ====== 标记 + 插入按钮 ======
+function markAndAddButton(element, extractFn) {
+  element.dataset.detected = "true";
+  element.style.outline = "3px dashed #ff4757";
+  element.style.backgroundColor = "rgba(255, 71, 87, 0.05)";
+
+  const btnContainer = document.createElement('div');
+  btnContainer.style.cssText = "margin: 5px 0; position: relative; z-index: 9999;";
+
+  const downloadBtn = document.createElement('button');
+  const possibleTitle = element.previousElementSibling?.innerText?.split('\n')[0] 
+    || element.closest('section')?.querySelector('h1,h2,h3,h4')?.innerText
+    || "财务报表";
+  downloadBtn.innerText = `📥 下载: ${possibleTitle.substring(0, 20)}`;
+  downloadBtn.style.cssText = `
+    background: #ff4757; color: white; border: none; padding: 6px 12px;
+    cursor: pointer; border-radius: 4px; font-weight: bold; font-size: 13px;
+  `;
+  downloadBtn.addEventListener('click', () => {  // 用 addEventListener 替代 onclick
+    const tableData = extractFn();
+    if (tableData) {
+      sendToDownload(tableData);
+      downloadBtn.innerText = "✅ 已导出";
+      downloadBtn.style.background = "#2ed573";
+    }
+  });
+
+  btnContainer.appendChild(downloadBtn);
+  element.parentNode.insertBefore(btnContainer, element);
+}
+
+// ====== 提取 <table> 数据（保留你的括号修复逻辑）======
+function processSingleTable(table) {
+  const rows = Array.from(table.querySelectorAll('tr'));
+  const content = rows.map(row => {
+    let cells = Array.from(row.querySelectorAll('td, th')).map(cell => {
+      // 处理 colspan 合并单元格，补齐列数
+      return { text: cell.innerText.trim(), colspan: parseInt(cell.getAttribute('colspan') || 1) };
+    });
+    
+    let cleanedRow = [];
+    cells.forEach(({ text, colspan }) => {
+      let val = text.replace(/,/g, '');
+      // 你原有的括号修复逻辑
+      if (val.match(/^\([\d.]+\)$/)) {
+        val = '-' + val.slice(1, -1); // (123) -> -123
+      }
+      cleanedRow.push(`"${val}"`);
+      // colspan 补齐空列，保持列对齐
+      for (let i = 1; i < colspan; i++) cleanedRow.push('""');
+    });
+    return cleanedRow;
+  });
+
+  const title = table.previousElementSibling?.innerText?.split('\n')[0] || "Report";
+  return { title, content };
+}
+
+// ====== 提取 div 模拟表格数据 ======
+function processDivTable(el) {
+  const rows = el.querySelectorAll('[role="row"], .row, .tr');
+  if (rows.length === 0) return null;
+
+  const content = Array.from(rows).map(row => {
+    const cells = row.querySelectorAll('[role="cell"], [role="columnheader"], .cell, .td, .th');
+    return Array.from(cells).map(cell => `"${cell.innerText.trim().replace(/,/g, '')}"`);
+  });
+
+  const title = el.closest('section')?.querySelector('h1,h2,h3,h4')?.innerText || "Report";
+  return { title, content };
+}
+
+// ====== 下载 CSV ======
+function sendToDownload(data) {
+  const csvContent = data.content.map(row => row.join(",")).join("\n");
+  const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${data.title.replace(/[^\u4e00-\u9fa5a-z0-9]/gi, '_')}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000); // 释放内存
+}
+
+// ====== 主入口 ======
+function highlightTables() {
+  processNativeTables();
+  processDivTables();
+  processIframes();
+}
+
+// ====== 启动策略 ======
+
+// 1. 立即执行一次
+highlightTables();
+
+// 2. 用 MutationObserver 替代 setTimeout 轮询，精准监听 DOM 变化
+const observer = new MutationObserver((mutations) => {
+  // 节流：避免频繁触发
+  clearTimeout(window._highlightTimer);
+  window._highlightTimer = setTimeout(highlightTables, 300);
+});
+observer.observe(document.body, { childList: true, subtree: true });
+
+// 3. 修复：用 addEventListener 而不是 onscroll（避免覆盖原有事件）
+let scrollTimer;
+window.addEventListener('scroll', () => {
+  clearTimeout(scrollTimer);
+  scrollTimer = setTimeout(highlightTables, 200); // 节流
+}, { passive: true });
+
+// 4. 页面完全加载后再跑一次（处理懒加载图片/脚本触发的DOM变化）
+window.addEventListener('load', () => setTimeout(highlightTables, 500));
