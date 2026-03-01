@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "财务报表猎手 (Finance Hunter)",
-  "version": "1.1",
-  "description": "自动识别并抓取官网财报表格，支持一键导出 CSV",
+  "version": "1.2",
+  "description": "自动识别并抓取官网财报表格，支持一键导出 CSV，支持 PDF 表格提取",
   "action": {
     "default_popup": "popup.html"
   },
@@ -13,5 +13,21 @@
       "all_frames": true
     }
   ],
-  "permissions": ["activeTab", "scripting"]
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "pdf.js",
+        "pdf.worker.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ]
 }
