@@ -1,4 +1,4 @@
-/*
+
 document.getElementById('scrapeBtn').addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
@@ -68,7 +68,8 @@ function downloadCSV(contentRows) {
   a.click();
 }
 
-*/
+
+/*
 
 function scrapeFinancialTables() {
 
@@ -89,34 +90,6 @@ function scrapeFinancialTables() {
       const cells = Array.from(row.querySelectorAll('td, th')).map(c => c.innerText.trim());
       const cleaned = [];
 
-      // ✅ 把这段完整替换原来的 for 循环
-      /*
-      for (let i = 0; i < cells.length; i++) {
-        const val = cells[i].replace(/,/g, '');
-
-        // 情况1：三格分离 → ( | 89715 | )
-        if (val === '(' && i + 2 < cells.length && cells[i + 2].trim() === ')') {
-          cleaned.push(`"-${cells[i + 1].replace(/,/g, '')}"`);
-          i += 2;
-          continue;
-        }
-
-        // 情况2：两格分离 → (89715 | )
-        if (val.startsWith('(') && !val.endsWith(')') && i + 1 < cells.length && cells[i + 1].trim() === ')') {
-          cleaned.push(`"-${val.slice(1)}"`);
-          i += 1;
-          continue;
-        }
-
-        // 情况3：整体在一格 → (89715)
-        if (/^\([\d.]+\)$/.test(val)) {
-          cleaned.push(`"-${val.slice(1, -1)}"`);
-          continue;
-        }
-
-        cleaned.push(cleanCell(cells[i]));
-      }
-      */
      for (let i = 0; i < cells.length; i++) {
   const val = cells[i].replace(/,/g, '').trim();
 
@@ -156,3 +129,5 @@ function scrapeFinancialTables() {
     return { tableName, content };
   });
 }
+
+*/
