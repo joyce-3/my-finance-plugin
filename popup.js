@@ -90,6 +90,7 @@ function scrapeFinancialTables() {
       const cleaned = [];
 
       // ✅ 把这段完整替换原来的 for 循环
+      /*
       for (let i = 0; i < cells.length; i++) {
         const val = cells[i].replace(/,/g, '');
 
@@ -115,6 +116,41 @@ function scrapeFinancialTables() {
 
         cleaned.push(cleanCell(cells[i]));
       }
+      */
+      for (let i = 0; i < cells.length; i++) {
+  const val = cells[i].replace(/,/g, '');
+
+  // 情况1：三格分离 → ( | 89715 | )
+  if (val === '(' && i + 2 < cells.length && cells[i + 2].trim() === ')') {
+    cleaned.push(`"-${cells[i + 1].replace(/,/g, '')}"`);
+    i += 2;
+    continue;
+  }
+
+  // 情况2：左括号和数字在一起 → (89715 | 空格... | )
+  // 往后最多找4格，跳过中间的空单元格
+  if (val.startsWith('(') && !val.endsWith(')')) {
+    let closingIdx = -1;
+    for (let j = i + 1; j < Math.min(i + 5, cells.length); j++) {
+      if (cells[j].trim() === ')') { closingIdx = j; break; }
+      if (cells[j].trim() !== '') break; // 遇到非空非)就放弃
+    }
+    if (closingIdx !== -1) {
+      cleaned.push(`"-${val.slice(1).replace(/,/g, '')}"`);
+      i = closingIdx; // 跳到右括号那格
+      continue;
+    }
+  }
+
+  // 情况3：整体在一格 → (89715)
+  if (/^\([\d.]+\)$/.test(val)) {
+    cleaned.push(`"-${val.slice(1, -1)}"`);
+    continue;
+  }
+
+  cleaned.push(cleanCell(cells[i]));
+}
+      
       return cleaned;
     });
 
