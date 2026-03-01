@@ -17,6 +17,7 @@ document.getElementById('scrapeBtn').addEventListener('click', async () => {
   });
 });
 
+/*
 // 数据清洗逻辑：处理财务格式
 function cleanFinanceData(text) {
   let clean = text.trim().replace(/,/g, ''); // 移除千分位逗号
@@ -44,6 +45,46 @@ function scrapeFinancialTables() {
       })
     );
     return { content };
+  });
+}
+*/
+function scrapeFinancialTables() {
+  const tables = Array.from(document.querySelectorAll('table'));
+  
+  return tables.map(table => {
+    const rows = Array.from(table.querySelectorAll('tr'));
+    const content = rows.map(row => {
+      let cells = Array.from(row.querySelectorAll('td, th')).map(cell => cell.innerText.trim());
+      
+      // --- 关键逻辑：修复括号拆分问题 ---
+      let cleanedRow = [];
+      for (let i = 0; i < cells.length; i++) {
+        let val = cells[i].replace(/,/g, ''); // 移除千分位
+        
+        // 如果当前格是 "("，且下一格有内容，尝试合并
+        if (val === "(" && i + 1 < cells.length) {
+          let nextVal = cells[i+1].replace(/,/g, '');
+          // 检查再下一格是不是 ")"
+          if (i + 2 < cells.length && cells[i+2] === ")") {
+            cleanedRow.push(`"-${nextVal}"`); // 合并为负数
+            i += 2; // 跳过后面两格
+            continue;
+          }
+        }
+        
+        // 处理自带括号的情况 (123)
+        if (val.startsWith('(') && val.endsWith(')')) {
+          val = '-' + val.substring(1, val.length - 1);
+        }
+        
+        cleanedRow.push(`"${val}"`);
+      }
+      return cleanedRow;
+    });
+    
+    // 尝试找表格标题
+    let tableName = table.previousElementSibling?.innerText?.split('\n')[0] || "Table";
+    return { tableName, content };
   });
 }
 
