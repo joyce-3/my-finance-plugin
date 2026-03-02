@@ -143,14 +143,14 @@ window.onscroll = () => {
 */
 // ====== 核心检测逻辑 ======
 const financeKeywords = [
-  "Revenue", "Income", "Assets", "Liabilities", "Equity", "Cash", 
+  "Revenue", "Income", "Assets", "Liabilities", "Equity", "Cash",
   "Operating", "Net loss", "Net income", "Balance", "Earnings", "EPS",
   "资产", "负债", "收入", "支出", "利润", "现金流", "股东权益"
 ];
 
 function isFinancialTable(element) {
   const text = element.innerText || element.textContent;
-  const hasKeyword = financeKeywords.some(key => 
+  const hasKeyword = financeKeywords.some(key =>
     text.toLowerCase().includes(key.toLowerCase())
   );
   // 对于真实 <table>，检查行列数
@@ -225,7 +225,7 @@ function markAndAddButton(element, extractFn) {
   btnContainer.style.cssText = "margin: 5px 0; position: relative; z-index: 9999;";
 
   const downloadBtn = document.createElement('button');
-  const possibleTitle = element.previousElementSibling?.innerText?.split('\n')[0] 
+  const possibleTitle = element.previousElementSibling?.innerText?.split('\n')[0]
     || element.closest('section')?.querySelector('h1,h2,h3,h4')?.innerText
     || "财务报表";
   downloadBtn.innerText = `📥 下载: ${possibleTitle.substring(0, 20)}`;
@@ -249,29 +249,104 @@ function markAndAddButton(element, extractFn) {
 // ====== 提取 <table> 数据（保留你的括号修复逻辑）======
 function processSingleTable(table) {
   const rows = Array.from(table.querySelectorAll('tr'));
-  const content = rows.map(row => {
-    let cells = Array.from(row.querySelectorAll('td, th')).map(cell => {
-      // 处理 colspan 合并单元格，补齐列数
-      return { text: cell.innerText.trim(), colspan: parseInt(cell.getAttribute('colspan') || 1) };
-    });
-    
-    let cleanedRow = [];
+
+  // ── 第一步：提取所有行的原始 cells ──
+  const parsedRows = rows.map(row => {
+    return Array.from(row.querySelectorAll('td, th')).map(cell => ({
+      text: cell.innerText.trim(),
+      colspan: parseInt(cell.getAttribute('colspan') || 1)
+    }));
+  });
+
+  // ── 第二步：找出哪些列是货币列 ──
+  const colCurrencyCount = {};
+  parsedRows.forEach(cells => {
+    let colIndex = 0;
     cells.forEach(({ text, colspan }) => {
-      let val = text.replace(/,/g, '');
-      // 你原有的括号修复逻辑
-      if (val.match(/^\([\d.]+\)$/)) {
-        val = '-' + val.slice(1, -1); // (123) -> -123
+      const val = text.replace(/,/g, '').trim();
+      if (/^[$€£¥₩]$/.test(val)) {
+        colCurrencyCount[colIndex] = (colCurrencyCount[colIndex] || 0) + 1;
       }
-      cleanedRow.push(`"${val}"`);
-      // colspan 补齐空列，保持列对齐
-      for (let i = 1; i < colspan; i++) cleanedRow.push('""');
+      colIndex += colspan;
     });
+  });
+
+  const currencyCols = new Set(
+    Object.entries(colCurrencyCount)
+      .filter(([, count]) => count > 1)
+      .map(([col]) => parseInt(col))
+  );
+
+  // ── 第三步：清洗每一行 ──
+  const content = parsedRows.map(cells => {
+    const cleanedRow = [];
+    let colIndex = 0;
+
+    for (let i = 0; i < cells.length; i++) {
+      const { text, colspan } = cells[i];
+      const val = text.replace(/,/g, '').trim();
+
+      // 1. 跳过孤立括号残留格
+      if (val === '(' || val === ')') {
+        colIndex += colspan;
+        continue;
+      }
+
+      // 2. 货币符号单独一格 → 货币列 + 数字列分开
+      if (/^[$€£¥₩]$/.test(val) && i + 1 < cells.length) {
+        const nextVal = cells[i + 1].text.replace(/,/g, '').trim();
+        if (/^-?[\d.]+$/.test(nextVal)) {
+          cleanedRow.push(`"${val}"`);
+          cleanedRow.push(`"${nextVal}"`);
+          for (let c = 1; c < colspan; c++) cleanedRow.push('""');
+          colIndex += colspan + 1;
+          i += 1;
+          continue;
+        }
+      }
+
+      // 3. 当前列是货币列，但这行没有货币符号 → 补空列占位
+      if (currencyCols.has(colIndex) && !/^[$€£¥₩]$/.test(val)) {
+        cleanedRow.push('""');
+        colIndex += 1;
+        // 不推进 i，继续处理当前 cell 的数字内容
+      }
+
+      // 4. 左括号和数字在同一格，右括号在下一格：(89715 | )
+      if (val.startsWith('(') && !val.endsWith(')')) {
+        cleanedRow.push(`"-${val.slice(1)}"`);
+        for (let c = 1; c < colspan; c++) cleanedRow.push('""');
+        if (i + 1 < cells.length && cells[i + 1].text.trim() === ')') i += 1;
+        colIndex += colspan;
+        continue;
+      }
+
+      // 5. 整体括号负数在一格：(89715)
+      if (/^\([\d.]+\)$/.test(val)) {
+        cleanedRow.push(`"-${val.slice(1, -1)}"`);
+        for (let c = 1; c < colspan; c++) cleanedRow.push('""');
+        colIndex += colspan;
+        continue;
+      }
+
+      // 6. 普通格
+      cleanedRow.push(`"${val.replace(/"/g, '""')}"`);
+      for (let c = 1; c < colspan; c++) cleanedRow.push('""');
+      colIndex += colspan;
+    }
+
     return cleanedRow;
   });
 
-  const title = table.previousElementSibling?.innerText?.split('\n')[0] || "Report";
+  const title =
+    table.previousElementSibling?.innerText?.split('\n')[0]?.trim()
+    || table.querySelector('caption')?.innerText?.trim()
+    || 'Report';
+
   return { title, content };
 }
+
+
 
 // ====== 提取 div 模拟表格数据 ======
 function processDivTable(el) {
